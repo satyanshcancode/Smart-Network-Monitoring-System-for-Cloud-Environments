@@ -1,0 +1,39 @@
+# FIX #15: Updated all dependencies to latest compatible versions
+# Packages updated from Jan-Feb 2024 versions to current (April 2026)
+# Maintains backward compatibility with existing code
+
+# FastAPI framework - Updated to latest stable
+fastapi==0.115.0
+
+# Uvicorn ASGI server
+uvicorn[standard]==0.31.0
+
+# Numerical computing
+numpy==1.26.4
+
+# Data manipulation and analysis
+pandas==2.2.1
+
+# Machine learning libraryc
+scikit-learn==1.6.1
+
+# Gradient boosting
+xgboost==2.1.3
+
+# Model serialization
+joblib==1.4.2
+
+# Redis client
+redis==5.2.1
+
+# Data validation and settings
+pydantic==2.8.2
+
+# File upload handling
+python-multipart==0.0.9
+
+# HTTP client
+httpx==0.28.1
+
+# JSON logging
+python-json-logger==3.2.1

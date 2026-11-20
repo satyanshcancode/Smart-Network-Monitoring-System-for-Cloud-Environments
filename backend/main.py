@@ -304,8 +304,8 @@ def check_async_status(ack_id: str):
 
 @app.delete("/session/{session_id}")
 def reset_session(session_id: str):
-    """Reset/clear a session"""
-    network_monitor.reset_session(session_id)
+    """Reset/clear all session state"""
+    adaptation_controller.reset_session(session_id)
     return {"message": f"Session {session_id} reset"}
 
 

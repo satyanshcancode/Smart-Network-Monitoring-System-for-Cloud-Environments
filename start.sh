@@ -41,7 +41,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 # Install backend dependencies if needed
-if ! python3 -c "import fastapi, uvicorn, sklearn" >/dev/null 2>&1; then
+if ! python3 -c "import fastapi, uvicorn, sklearn, xgboost, pandas" >/dev/null 2>&1; then
     echo -e "${BLUE}Installing Python dependencies...${NC}"
     pip3 install -r backend/requirements.txt -q
     if [ $? -ne 0 ]; then

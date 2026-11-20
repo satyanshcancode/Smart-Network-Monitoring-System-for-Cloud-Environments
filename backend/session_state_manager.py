@@ -208,6 +208,16 @@ class SessionManager:
         """Get all sessions as dictionaries"""
         return {sid: session.to_dict() for sid, session in self.sessions.items()}
     
+    def delete_session(self, session_id: str) -> bool:
+        """Remove a session and its associated state machine"""
+        deleted = False
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            deleted = True
+        if session_id in self.state_machines:
+            del self.state_machines[session_id]
+        return deleted
+
     def cleanup_inactive_sessions(self, max_inactive_seconds: float = 3600):
         """Remove inactive sessions"""
         current_time = time.time()

@@ -184,3 +184,23 @@ def test_prediction_engine():
     explanation = predictor.explain_prediction(stable_features)
     assert "stability_score" in explanation
     assert "explanations" in explanation
+
+
+def test_delete_session(client):
+    session_id = f"test_del_{os.urandom(4).hex()}"
+    # Create the session by simulating network
+    sim_res = client.post(f"/session/{session_id}/simulate", json={"condition": "good"})
+    assert sim_res.status_code == 200
+
+    # Verify session exists
+    status_res = client.get(f"/session/{session_id}")
+    assert status_res.status_code == 200
+
+    # Delete session
+    del_res = client.delete(f"/session/{session_id}")
+    assert del_res.status_code == 200
+    assert del_res.json()["message"] == f"Session {session_id} reset"
+
+    # Verify session no longer exists (returns 404)
+    after_res = client.get(f"/session/{session_id}")
+    assert after_res.status_code == 404

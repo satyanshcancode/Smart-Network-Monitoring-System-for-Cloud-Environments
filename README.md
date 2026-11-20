@@ -153,6 +153,18 @@ npm run dev
 
 The frontend will start on `http://localhost:5173`
 
+### Option C: Using Docker Compose
+
+To spin up both frontend and backend in isolated containers:
+
+```bash
+docker-compose up --build
+```
+
+- Backend API: `http://localhost:8000`
+- Frontend UI: `http://localhost:5173`
+- API Docs: `http://localhost:8000/docs`
+
 ### Step 3: Open the Demo
 
 1. Open your browser to `http://localhost:5173`

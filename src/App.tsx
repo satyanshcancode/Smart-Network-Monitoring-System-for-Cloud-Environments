@@ -268,7 +268,14 @@ function App() {
     setLoading(false)
   }
 
-  const resetSession = () => {
+  const resetSession = async () => {
+    if (sessionId) {
+      try {
+        await fetch(`${API_BASE}/session/${sessionId}`, { method: 'DELETE' })
+      } catch {
+        // Ignore network errors when clearing previous session
+      }
+    }
     setSessionId(`demo_${Date.now()}`)
     setSessionStatus(null)
     setLastResponse(null)
@@ -411,7 +418,7 @@ function App() {
                   disabled={loading}
                 >
                   <Wifi className="w-4 h-4 mr-2 text-yellow-400" />
-                  Poor Network (800ms)
+                  Poor Network (500ms)
                 </Button>
                 <Button 
                   variant="outline" 
@@ -420,7 +427,7 @@ function App() {
                   disabled={loading}
                 >
                   <WifiOff className="w-4 h-4 mr-2 text-orange-400" />
-                  Bad Network (2000ms)
+                  Bad Network (1500ms)
                 </Button>
                 <Button 
                   variant="outline" 

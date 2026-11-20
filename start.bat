@@ -30,7 +30,7 @@ set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
 REM Install backend dependencies if needed
-python -c "import fastapi, uvicorn, sklearn" >nul 2>&1
+python -c "import fastapi, uvicorn, sklearn, xgboost, pandas" >nul 2>&1
 if errorlevel 1 (
     echo Installing Python dependencies...
     pip install -r backend\requirements.txt -q

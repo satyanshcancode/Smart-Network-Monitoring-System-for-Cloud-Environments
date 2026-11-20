@@ -572,6 +572,15 @@ class AdaptationController:
         """Get all active sessions"""
         return self.session_manager.get_all_sessions()
     
+    def reset_session(self, session_id: str):
+        """Reset and clear all state associated with a session"""
+        self.network_monitor.reset_session(session_id)
+        self.session_manager.delete_session(session_id)
+        # Clear queued items for this session
+        to_del = [k for k, v in list(queued_tasks_store.items()) if v.get('session_id') == session_id or k == session_id]
+        for k in to_del:
+            queued_tasks_store.pop(k, None)
+
     def get_queued_status(self, ack_id: str) -> Dict:
         """Get status of a queued async item by ack_id"""
         item = get_queued_item(ack_id)

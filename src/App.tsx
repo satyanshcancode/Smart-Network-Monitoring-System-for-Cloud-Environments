@@ -58,7 +58,7 @@ interface ApiResponse {
       session_id: string
       processing_time_ms: number
     }
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
@@ -107,22 +107,50 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBounda
 // ─────────────────────────────────────────────────────────────────────────────
 
 function App() {
-  const [sessionId, setSessionId] = useState<string>('')
+  const [sessionId, setSessionId] = useState<string>(() => `demo_${Date.now()}`)
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [lastResponse, setLastResponse] = useState<ApiResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Generate session ID on mount
-  useEffect(() => {
-    setSessionId(`demo_${Date.now()}`)
-  }, [])
-
-  // FIX #12: Fetch session status as soon as session ID is set
-  useEffect(() => {
+  const fetchSessionStatus = useCallback(async () => {
     if (!sessionId) return
-    fetchSessionStatus()
+    
+    try {
+      const response = await fetch(`${API_BASE}/session/${sessionId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSessionStatus(data)
+        setError(null)
+      }
+    } catch {
+      setError('Failed to fetch session status. Is the backend running?')
+    }
+  }, [sessionId])
+
+  // Fetch session status whenever session ID changes
+  useEffect(() => {
+    let ignore = false
+    const loadInitialStatus = async () => {
+      if (!sessionId) return
+      try {
+        const response = await fetch(`${API_BASE}/session/${sessionId}`)
+        if (response.ok && !ignore) {
+          const data = await response.json()
+          setSessionStatus(data)
+          setError(null)
+        }
+      } catch {
+        if (!ignore) {
+          setError('Failed to fetch session status. Is the backend running?')
+        }
+      }
+    }
+    loadInitialStatus()
+    return () => {
+      ignore = true
+    }
   }, [sessionId])
 
   // Auto refresh session status
@@ -134,22 +162,7 @@ function App() {
     }, 2000)
     
     return () => clearInterval(interval)
-  }, [autoRefresh, sessionId])
-
-  const fetchSessionStatus = async () => {
-    if (!sessionId) return
-    
-    try {
-      const response = await fetch(`${API_BASE}/session/${sessionId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setSessionStatus(data)
-        setError(null)
-      }
-    } catch (err) {
-      setError('Failed to fetch session status. Is the backend running?')
-    }
-  }
+  }, [autoRefresh, sessionId, fetchSessionStatus])
 
   const simulateNetwork = async (condition: string) => {
     if (!sessionId) return
@@ -167,7 +180,7 @@ function App() {
         setSessionStatus(data.session_status)
         setError(null)
       }
-    } catch (err) {
+    } catch {
       setError('Failed to simulate network condition')
     }
     setLoading(false)
@@ -248,7 +261,7 @@ function App() {
         await fetchSessionStatus()
         setError(null)
       }
-    } catch (err) {
+    } catch {
       setError('Failed to submit request. Is the backend running on port 8000?')
     }
     
@@ -538,9 +551,9 @@ function App() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {sessionStatus?.session?.transition_history?.length > 0 ? (
+                    {(sessionStatus?.session?.transition_history?.length ?? 0) > 0 ? (
                       <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {sessionStatus.session.transition_history.map((transition, idx) => (
+                        {sessionStatus?.session?.transition_history.map((transition, idx) => (
                           <div key={idx} className="flex items-center gap-2 p-2 bg-slate-700/50 rounded text-sm">
                             <Badge variant="outline" className="capitalize text-xs">
                               {transition.from}

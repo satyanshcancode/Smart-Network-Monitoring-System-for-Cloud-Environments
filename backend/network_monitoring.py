@@ -86,7 +86,7 @@ class SessionWindow:
         if not self.requests:
             return self._empty_features()
 
-        latencies = [min(r.latency_ms, 2000) for r in self.requests]  # outlier protection
+        latencies = [min(r.latency_ms, 10000.0) for r in self.requests]  # outlier protection (cap at 10s)
         payloads = [r.payload_size_bytes for r in self.requests]
         timestamps = [r.timestamp for r in self.requests]
 

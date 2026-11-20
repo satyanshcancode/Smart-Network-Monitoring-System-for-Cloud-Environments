@@ -11,6 +11,7 @@ Fixes applied:
 import numpy as np
 import joblib
 import os
+import warnings
 from typing import Dict, List
 import logging
 
@@ -129,10 +130,11 @@ class StabilityPredictor:
         if self.model is not None:
             try:
                 X = fv.reshape(1, -1)
-                if self.scaler is not None:
-                    X = self.scaler.transform(X)
-
-                proba = self.model.predict_proba(X)[0]
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=UserWarning)
+                    if self.scaler is not None:
+                        X = self.scaler.transform(X)
+                    proba = self.model.predict_proba(X)[0]
 
                 # Determine index of 'stable' class
                 stable_idx = _STABLE_CLASS_INDEX

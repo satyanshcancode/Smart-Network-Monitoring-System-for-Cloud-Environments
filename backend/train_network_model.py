@@ -118,9 +118,9 @@ if hasattr(best_model, "feature_importances_"):
 
     print(importance_df.head(10))
 
-joblib.dump(best_model, "network_model.pkl")
-joblib.dump(scaler, "scaler.pkl")
-joblib.dump(le, "label_encoder.pkl")
-joblib.dump(X.columns.tolist(), "feature_names.pkl")
+joblib.dump(best_model, os.path.join(script_dir, "network_model.pkl"))
+joblib.dump(scaler, os.path.join(script_dir, "scaler.pkl"))
+joblib.dump(le, os.path.join(script_dir, "label_encoder.pkl"))
+joblib.dump(X.columns.tolist(), os.path.join(script_dir, "feature_names.pkl"))
 
 print("Saved: network_model.pkl, scaler.pkl, label_encoder.pkl, feature_names.pkl")

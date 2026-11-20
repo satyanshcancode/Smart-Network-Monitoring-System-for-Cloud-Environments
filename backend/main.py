@@ -3,6 +3,7 @@ Adaptive Middleware Prototype - Main FastAPI Application
 Demonstrates the patent with an exam submission system
 """
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
@@ -15,6 +16,8 @@ from session_state_manager import session_manager
 from network_monitoring import network_monitor
 from prediction_engine import predictor
 
+from contextlib import asynccontextmanager
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -22,18 +25,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler"""
+    logger.info("=" * 60)
+    logger.info("Adaptive Middleware Prototype Starting...")
+    logger.info("=" * 60)
+    logger.info("Patent: Session-aware cloud middleware with dynamic")
+    logger.info("        execution mode adaptation based on network conditions")
+    logger.info("=" * 60)
+    logger.info("API Documentation: http://localhost:8000/docs")
+    logger.info("=" * 60)
+    yield
+
+
 # Create FastAPI app
 app = FastAPI(
     title="Adaptive Middleware Prototype",
     description="Session-aware cloud middleware with dynamic execution mode adaptation",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
+
+
+def _dump_model(item: Any) -> Any:
+    """Compatibility helper for Pydantic v1 / v2 dict dumping"""
+    if hasattr(item, "model_dump"):
+        return item.model_dump()
+    if hasattr(item, "dict"):
+        return item.dict()
+    return item
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -112,14 +140,14 @@ def submit_exam(
     request_data = {
         "student_id": submission.student_id,
         "exam_id": submission.exam_id,
-        "answers": [ans.dict() for ans in submission.answers],
+        "answers": [_dump_model(ans) for ans in submission.answers],
         "simulated_latency": latency,
         "retry_count": submission.retry_count,
         "mode_hint": "normal"
     }
     
     response = adaptation_controller.handle_request(request_data, session_id)
-    return response
+    return JSONResponse(status_code=response.get("status_code", 200), content=response)
 
 
 @app.post("/exam/question/{question_id}/answer")
@@ -135,13 +163,13 @@ def submit_single_answer(
     
     request_data = {
         "question_id": question_id,
-        "answer": answer.dict(),
+        "answer": _dump_model(answer),
         "simulated_latency": latency,
         "mode_hint": "normal"
     }
     
     response = adaptation_controller.handle_request(request_data, session_id)
-    return response
+    return JSONResponse(status_code=response.get("status_code", 200), content=response)
 
 
 @app.post("/exam/batch")
@@ -157,7 +185,7 @@ def submit_batch(
     request_data = {
         "student_id": submission.student_id,
         "exam_id": submission.exam_id,
-        "answers": [ans.dict() for ans in submission.answers],
+        "answers": [_dump_model(ans) for ans in submission.answers],
         "batch_size": submission.batch_size,
         "finalize": submission.finalize,
         "simulated_latency": latency,
@@ -165,7 +193,7 @@ def submit_batch(
     }
     
     response = adaptation_controller.handle_request(request_data, session_id)
-    return response
+    return JSONResponse(status_code=response.get("status_code", 200), content=response)
 
 
 @app.post("/exam/accumulate")
@@ -176,7 +204,7 @@ def submit_accumulated(
 ):
     """Critical Mode: Accumulated exam submission"""
     session_id = x_session_id or str(uuid.uuid4())
-    # FIX #1: Added proper null checking for latency
+    # Added proper null checking for latency
     latency = x_simulated_latency
     if latency is None:
         latency = submission.get('simulated_latency')
@@ -197,7 +225,7 @@ def submit_accumulated(
     }
     
     response = adaptation_controller.handle_request(request_data, session_id)
-    return response
+    return JSONResponse(status_code=response.get("status_code", 200), content=response)
 
 
 @app.get("/session/{session_id}")
@@ -348,19 +376,6 @@ def health_check():
         "timestamp": time.time(),
         "active_sessions": len(session_manager.get_all_sessions())
     }
-
-
-@app.on_event("startup")
-def startup_event():
-    """Initialize on startup"""
-    logger.info("=" * 60)
-    logger.info("Adaptive Middleware Prototype Starting...")
-    logger.info("=" * 60)
-    logger.info("Patent: Session-aware cloud middleware with dynamic")
-    logger.info("        execution mode adaptation based on network conditions")
-    logger.info("=" * 60)
-    logger.info("API Documentation: http://localhost:8000/docs")
-    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

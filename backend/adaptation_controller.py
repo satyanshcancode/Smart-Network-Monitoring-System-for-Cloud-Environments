@@ -21,8 +21,9 @@ from prediction_engine import predictor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global async processing queue for critical mode
+# Global async processing queue and registry for critical mode
 async_processing_queue = queue.Queue()
+queued_tasks_store: Dict[str, Dict] = {}
 
 
 @dataclass
@@ -346,11 +347,12 @@ class CriticalStrategy(ExecutionStrategy):
             })
             
         except Exception as e:
-            self._queue_for_async_processing(context, full_data)
+            ack_id = self._queue_for_async_processing(context, full_data)
             return Response(202, {
                 "status": "queued",
                 "mode": "critical",
-                "check_url": f"/status/{context.session_id}",
+                "ack": ack_id,
+                "check_url": f"/status/{ack_id}",
                 "estimated_seconds": 30
             })
     
@@ -365,7 +367,7 @@ class CriticalStrategy(ExecutionStrategy):
         
         ack_id = f"{context.session_id}_{int(time.time())}"
         
-        # FIX #7: Actually queue the data instead of just returning ack
+        # Save to async processing queue and lookup registry
         queue_item = {
             "ack_id": ack_id,
             "session_id": context.session_id,
@@ -373,6 +375,8 @@ class CriticalStrategy(ExecutionStrategy):
             "timestamp": time.time(),
             "status": "completed"
         }
+        queued_tasks_store[ack_id] = queue_item
+        queued_tasks_store[context.session_id] = queue_item
         
         try:
             # Put the item in the queue (non-blocking)
@@ -388,7 +392,7 @@ class CriticalStrategy(ExecutionStrategy):
             "processed_at": time.time()
         }
     
-    def _queue_for_async_processing(self, context: SessionContext, data: List[Dict]):
+    def _queue_for_async_processing(self, context: SessionContext, data: List[Dict]) -> str:
         """Queue for asynchronous processing on error"""
         logger.info(f"[CRITICAL] Queued session {context.session_id} for async processing on error")
         
@@ -399,18 +403,23 @@ class CriticalStrategy(ExecutionStrategy):
             elif 'answer' in item:
                 all_answers.append(item)
         
+        ack_id = f"{context.session_id}_{int(time.time())}"
         queue_item = {
-            "ack_id": f"{context.session_id}_{int(time.time())}",
+            "ack_id": ack_id,
             "session_id": context.session_id,
             "answers": all_answers,
             "timestamp": time.time(),
             "status": "error_queued"
         }
+        queued_tasks_store[ack_id] = queue_item
+        queued_tasks_store[context.session_id] = queue_item
         
         try:
             async_processing_queue.put_nowait(queue_item)
         except queue.Full:
             logger.error(f"[CRITICAL] Cannot queue - queue is full")
+        
+        return ack_id
     
     def validate_input(self, data: Dict) -> ValidationResult:
         """Minimal validation - accept and queue"""
@@ -418,38 +427,18 @@ class CriticalStrategy(ExecutionStrategy):
     
     def handle_error(self, error: Exception, context: SessionContext) -> ErrorResponse:
         """No retry, queue for async"""
-        self._queue_for_async_processing(context, [])
+        ack_id = self._queue_for_async_processing(context, [])
         return ErrorResponse(
             retry=False,
             queued=True,
-            check_status_url=f"/status/{context.session_id}",
+            check_status_url=f"/status/{ack_id}",
             error=str(error)
         )
 
 
-def get_queued_item(ack_id: str) -> Optional[Dict]:
-    """Retrieve a queued item by ack_id (for status endpoint)"""
-    # Convert queue to list, search, then rebuild
-    items = []
-    found_item = None
-    
-    try:
-        while not async_processing_queue.empty():
-            item = async_processing_queue.get_nowait()
-            items.append(item)
-            if item.get('ack_id') == ack_id:
-                found_item = item
-    except queue.Empty:
-        pass
-    
-    # Put items back in queue
-    for item in items:
-        try:
-            async_processing_queue.put_nowait(item)
-        except queue.Full:
-            break
-    
-    return found_item
+def get_queued_item(identifier: str) -> Optional[Dict]:
+    """Retrieve a queued item by ack_id or session_id (for status endpoint)"""
+    return queued_tasks_store.get(identifier)
 
 
 class AdaptationController:
@@ -506,6 +495,19 @@ class AdaptationController:
         
         # Update session mode
         new_mode = self.session_manager.update_session_mode(session_id, stability_score)
+        
+        # If mode_hint is explicitly given (e.g. from dedicated test endpoints) on fresh sessions
+        mode_hint = request_data.get('mode_hint')
+        if mode_hint and len(context.transition_history) <= 1 and context.request_count <= 1:
+            hint_map = {
+                'normal': ExecutionMode.NORMAL,
+                'degraded': ExecutionMode.DEGRADED,
+                'critical': ExecutionMode.CRITICAL
+            }
+            if mode_hint in hint_map:
+                new_mode = hint_map[mode_hint]
+                context.current_mode = new_mode
+
         context.current_stability_score = stability_score
         
         # Log transition

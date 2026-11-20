@@ -204,3 +204,48 @@ def test_delete_session(client):
     # Verify session no longer exists (returns 404)
     after_res = client.get(f"/session/{session_id}")
     assert after_res.status_code == 404
+
+
+def test_mode_hint_dynamics(client):
+    """Verify that mode_hint on dedicated test endpoints reliably transitions session mode"""
+    session_id = f"test_hint_{os.urandom(4).hex()}"
+    # Initially submit a normal mode request
+    res_norm = client.post(
+        "/exam/submit",
+        json={"student_id": "s1", "exam_id": "e1", "answers": [{"question_id": 1, "answer": "A"}]},
+        headers={"X-Session-Id": session_id}
+    )
+    assert res_norm.status_code == 200
+    assert res_norm.json()["body"]["_meta"]["mode"] == "normal"
+
+    # Now click/test critical mode - should reliably transition to critical
+    res_crit = client.post(
+        "/exam/accumulate",
+        json={"student_id": "s1", "exam_id": "e1", "answers": [{"question_id": 2, "answer": "B"}]},
+        headers={"X-Session-Id": session_id}
+    )
+    assert res_crit.status_code in [200, 202]
+    assert res_crit.json()["body"]["_meta"]["mode"] == "critical"
+    assert res_crit.json()["body"]["_meta"]["stability_score"] < 0.35
+
+
+def test_async_queue_worker():
+    """Verify background worker consumes and completes tasks from async_processing_queue"""
+    import time
+    from adaptation_controller import async_processing_queue, queued_tasks_store
+    ack_id = f"test_worker_{int(time.time() * 1000)}"
+    task_item = {
+        "ack_id": ack_id,
+        "session_id": "worker_sess",
+        "answers": [{"q": 1, "a": "X"}],
+        "timestamp": time.time(),
+        "status": "queued"
+    }
+    queued_tasks_store[ack_id] = task_item
+    async_processing_queue.put(task_item)
+
+    # Wait briefly for worker to consume
+    time.sleep(0.3)
+    assert queued_tasks_store[ack_id]["status"] == "completed"
+    assert "completed_at" in queued_tasks_store[ack_id]
+

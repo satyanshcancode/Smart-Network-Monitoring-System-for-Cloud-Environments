@@ -10,6 +10,7 @@ import json
 import logging
 import random
 import queue
+import threading
 
 from session_state_manager import (
     ExecutionMode, SessionContext, SessionManager, 
@@ -24,6 +25,66 @@ logger = logging.getLogger(__name__)
 # Global async processing queue and registry for critical mode
 async_processing_queue = queue.Queue()
 queued_tasks_store: Dict[str, Dict] = {}
+
+_worker_running = False
+_worker_thread: Optional[threading.Thread] = None
+
+
+def _async_worker_loop():
+    """Background consumer loop for async_processing_queue"""
+    global _worker_running
+    logger.info("[ASYNC_WORKER] Started background async queue consumer")
+    while _worker_running:
+        try:
+            task = async_processing_queue.get(timeout=0.5)
+        except queue.Empty:
+            continue
+        except Exception:
+            break
+        
+        try:
+            ack_id = task.get("ack_id")
+            session_id = task.get("session_id")
+            # Simulate real background task execution
+            time.sleep(0.05)
+            task["status"] = "completed"
+            task["processed_at"] = time.time()
+            task["completed_at"] = time.time()
+            task["items_processed"] = len(task.get("answers", []))
+            if ack_id:
+                queued_tasks_store[ack_id] = task
+            if session_id:
+                queued_tasks_store[session_id] = task
+            logger.info(f"[ASYNC_WORKER] Completed queued task {ack_id} for session {session_id}")
+        except Exception as err:
+            logger.error(f"[ASYNC_WORKER] Error processing queued task: {err}")
+        finally:
+            async_processing_queue.task_done()
+
+
+def start_background_worker():
+    """Start background async queue consumer thread"""
+    global _worker_running, _worker_thread
+    if not _worker_running:
+        _worker_running = True
+        _worker_thread = threading.Thread(
+            target=_async_worker_loop, daemon=True, name="AsyncQueueWorker"
+        )
+        _worker_thread.start()
+
+
+def stop_background_worker():
+    """Stop background async queue consumer thread"""
+    global _worker_running, _worker_thread
+    _worker_running = False
+    if _worker_thread and _worker_thread.is_alive():
+        _worker_thread.join(timeout=1.0)
+        _worker_thread = None
+
+
+# Auto-start worker
+start_background_worker()
+
 
 
 @dataclass
@@ -496,17 +557,20 @@ class AdaptationController:
         # Update session mode
         new_mode = self.session_manager.update_session_mode(session_id, stability_score)
         
-        # If mode_hint is explicitly given (e.g. from dedicated test endpoints) on fresh sessions
+        # If mode_hint is explicitly given (e.g. from dedicated test endpoints),
+        # calibrate the network window and transition the session to reflect the tested condition
         mode_hint = request_data.get('mode_hint')
-        if mode_hint and len(context.transition_history) <= 1 and context.request_count <= 1:
-            hint_map = {
-                'normal': ExecutionMode.NORMAL,
-                'degraded': ExecutionMode.DEGRADED,
-                'critical': ExecutionMode.CRITICAL
+        if mode_hint and context.current_mode.value != mode_hint:
+            condition_map = {
+                'normal': 'good',
+                'degraded': 'poor',
+                'critical': 'terrible'
             }
-            if mode_hint in hint_map:
-                new_mode = hint_map[mode_hint]
-                context.current_mode = new_mode
+            if mode_hint in condition_map:
+                self.simulate_network_condition(session_id, condition_map[mode_hint])
+                features = self.network_monitor.get_session_features(session_id)
+                stability_score = self.predictor.predict_stability_score(features)
+                new_mode = self.session_manager.update_session_mode(session_id, stability_score)
 
         context.current_stability_score = stability_score
         
@@ -649,6 +713,14 @@ class AdaptationController:
             self.network_monitor.record_request(metric)
         
         return {"status": f"Simulated {condition} network for session {session_id}"}
+    
+    def start_background_worker(self):
+        """Start async queue consumer"""
+        start_background_worker()
+
+    def stop_background_worker(self):
+        """Stop async queue consumer"""
+        stop_background_worker()
 
 
 # Global controller instance

@@ -37,7 +37,9 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info("API Documentation: http://localhost:8000/docs")
     logger.info("=" * 60)
+    adaptation_controller.start_background_worker()
     yield
+    adaptation_controller.stop_background_worker()
 
 
 # Create FastAPI app

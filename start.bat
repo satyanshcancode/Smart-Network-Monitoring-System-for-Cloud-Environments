@@ -30,15 +30,14 @@ set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
 REM Install backend dependencies if needed
-if not exist "backend\__pycache__" (
+python -c "import fastapi, uvicorn, sklearn" >nul 2>&1
+if errorlevel 1 (
     echo Installing Python dependencies...
-    cd backend
-    pip install -r requirements.txt -q
+    pip install -r backend\requirements.txt -q
     if errorlevel 1 (
         echo Error: Failed to install Python dependencies
         exit /b 1
     )
-    cd ..
     echo ✓ Python dependencies installed
 )
 

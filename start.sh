@@ -41,15 +41,13 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 # Install backend dependencies if needed
-if [ ! -d "backend/__pycache__" ]; then
+if ! python3 -c "import fastapi, uvicorn, sklearn" >/dev/null 2>&1; then
     echo -e "${BLUE}Installing Python dependencies...${NC}"
-    cd backend
-    pip3 install -r requirements.txt -q
+    pip3 install -r backend/requirements.txt -q
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: Failed to install Python dependencies${NC}"
         exit 1
     fi
-    cd ..
     echo -e "${GREEN}✓ Python dependencies installed${NC}"
 fi
 

@@ -3,7 +3,7 @@ import './App.css'
 import { 
   Play, Pause, RefreshCw, Activity, Zap, AlertTriangle, 
   CheckCircle, Server, Wifi, WifiOff, Gauge, BarChart3,
-  TrendingUp, TrendingDown, Minus, ArrowRight
+  TrendingUp, TrendingDown, Minus, ArrowRight, LineChart as ChartIcon
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,8 +12,25 @@ import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ReferenceLine
+} from 'recharts'
 
 // Types
+interface TelemetryPoint {
+  time: string
+  latency: number
+  stability: number
+  mode: string
+}
+
 interface SessionStatus {
   session: {
     session_id: string
@@ -109,6 +126,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBounda
 function App() {
   const [sessionId, setSessionId] = useState<string>(() => `demo_${Date.now()}`)
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null)
+  const [telemetryHistory, setTelemetryHistory] = useState<TelemetryPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [lastResponse, setLastResponse] = useState<ApiResponse | null>(null)
@@ -163,6 +181,21 @@ function App() {
     
     return () => clearInterval(interval)
   }, [autoRefresh, sessionId, fetchSessionStatus])
+
+  // Track real-time telemetry history for chart visualization
+  useEffect(() => {
+    if (!sessionStatus) return
+    const now = new Date()
+    const timeLabel = `${now.getMinutes()}:${now.getSeconds().toString().padStart(2, '0')}`
+    const latency = Number((sessionStatus.network_features?.avg_latency ?? 0).toFixed(1))
+    const stability = Number(((sessionStatus.prediction?.stability_score ?? 1) * 100).toFixed(1))
+    const mode = sessionStatus.session?.current_mode ?? 'normal'
+
+    setTelemetryHistory((prev) => {
+      const next = [...prev, { time: timeLabel, latency, stability, mode }]
+      return next.slice(-15)
+    })
+  }, [sessionStatus])
 
   const simulateNetwork = async (condition: string) => {
     if (!sessionId) return
@@ -278,6 +311,7 @@ function App() {
     }
     setSessionId(`demo_${Date.now()}`)
     setSessionStatus(null)
+    setTelemetryHistory([])
     setLastResponse(null)
     setError(null)
   }
@@ -543,12 +577,66 @@ function App() {
 
           {/* Right Column - Status & Transitions */}
           <div className="space-y-6">
-            <Tabs defaultValue="transitions" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 bg-slate-800">
-                <TabsTrigger value="transitions">Transitions</TabsTrigger>
-                <TabsTrigger value="prediction">Prediction</TabsTrigger>
+            <Tabs defaultValue="chart" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 bg-slate-800">
+                <TabsTrigger value="chart" className="flex items-center gap-1.5 text-xs">
+                  <ChartIcon className="w-3.5 h-3.5" />
+                  Live Trend
+                </TabsTrigger>
+                <TabsTrigger value="transitions" className="flex items-center gap-1.5 text-xs">
+                  <ArrowRight className="w-3.5 h-3.5" />
+                  Transitions
+                </TabsTrigger>
+                <TabsTrigger value="prediction" className="flex items-center gap-1.5 text-xs">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  Prediction
+                </TabsTrigger>
               </TabsList>
               
+              <TabsContent value="chart" className="mt-4">
+                <Card className="bg-slate-800/50 border-slate-700">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-cyan-400" />
+                        Live Telemetry & Stability Trend
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {telemetryHistory.length} samples
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {telemetryHistory.length > 0 ? (
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={telemetryHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.6} />
+                            <XAxis dataKey="time" stroke="#94a3b8" fontSize={11} />
+                            <YAxis yAxisId="lat" stroke="#38bdf8" fontSize={11} unit="ms" />
+                            <YAxis yAxisId="stab" orientation="right" stroke="#4ade80" domain={[0, 100]} fontSize={11} unit="%" />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '6px' }}
+                              labelStyle={{ color: '#cbd5e1' }}
+                            />
+                            <ReferenceLine yAxisId="stab" y={80} stroke="#22c55e" strokeDasharray="3 3" />
+                            <ReferenceLine yAxisId="stab" y={30} stroke="#ef4444" strokeDasharray="3 3" />
+                            <Line yAxisId="lat" type="monotone" dataKey="latency" name="Latency" stroke="#38bdf8" strokeWidth={2} dot={{ r: 2 }} />
+                            <Line yAxisId="stab" type="monotone" dataKey="stability" name="Stability" stroke="#4ade80" strokeWidth={2} dot={{ r: 2 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="text-center text-slate-500 py-12 text-sm">
+                        <ChartIcon className="w-10 h-10 mx-auto mb-2 opacity-40 text-cyan-400" />
+                        <p>No telemetry recorded yet</p>
+                        <p className="text-xs mt-1">Simulate network conditions or test modes to stream chart data</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               <TabsContent value="transitions" className="mt-4">
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>

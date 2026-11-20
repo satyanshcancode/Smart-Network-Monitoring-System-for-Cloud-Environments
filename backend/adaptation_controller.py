@@ -645,6 +645,19 @@ class AdaptationController:
         for k in to_del:
             queued_tasks_store.pop(k, None)
 
+    def cleanup_inactive_sessions(self, max_idle_seconds: float = 3600) -> int:
+        """Purge inactive sessions across network monitor, session manager, and async store"""
+        self.network_monitor.cleanup_sessions(max_idle_seconds=int(max_idle_seconds))
+        removed = self.session_manager.cleanup_inactive_sessions(max_inactive_seconds=max_idle_seconds)
+        now = time.time()
+        stale_keys = [
+            k for k, v in list(queued_tasks_store.items())
+            if now - v.get('timestamp', now) > max_idle_seconds
+        ]
+        for k in stale_keys:
+            queued_tasks_store.pop(k, None)
+        return removed
+
     def get_queued_status(self, ack_id: str) -> Dict:
         """Get status of a queued async item by ack_id"""
         item = get_queued_item(ack_id)

@@ -10,8 +10,9 @@ from typing import List, Dict, Optional, Any
 import time
 import uuid
 import logging
+import asyncio
 
-from adaptation_controller import adaptation_controller, ExecutionMode
+from adaptation_controller import adaptation_controller, ExecutionMode, async_processing_queue
 from session_state_manager import session_manager
 from network_monitoring import network_monitor
 from prediction_engine import predictor
@@ -26,6 +27,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def _periodic_cleanup_loop():
+    """Periodic task to purge inactive sessions and stale queued tasks"""
+    while True:
+        try:
+            await asyncio.sleep(600)  # Run every 10 minutes
+            removed = adaptation_controller.cleanup_inactive_sessions(max_idle_seconds=3600)
+            if removed > 0:
+                logger.info(f"[CLEANUP] Periodically purged {removed} inactive sessions")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[CLEANUP] Periodic cleanup error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler"""
@@ -38,7 +53,13 @@ async def lifespan(app: FastAPI):
     logger.info("API Documentation: http://localhost:8000/docs")
     logger.info("=" * 60)
     adaptation_controller.start_background_worker()
+    cleanup_task = asyncio.create_task(_periodic_cleanup_loop())
     yield
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     adaptation_controller.stop_background_worker()
 
 
@@ -372,11 +393,12 @@ def compare_modes():
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint"""
+    """Health check endpoint with queue and session metrics"""
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "active_sessions": len(session_manager.get_all_sessions())
+        "active_sessions": len(session_manager.get_all_sessions()),
+        "queue_size": async_processing_queue.qsize()
     }
 
 

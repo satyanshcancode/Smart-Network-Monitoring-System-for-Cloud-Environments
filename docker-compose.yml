@@ -9,6 +9,12 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   frontend:
     build:
@@ -19,4 +25,5 @@ services:
     environment:
       - VITE_API_BASE=http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy

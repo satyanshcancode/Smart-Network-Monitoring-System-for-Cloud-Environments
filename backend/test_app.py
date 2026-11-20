@@ -3,6 +3,7 @@ Automated Integration and Unit Tests for Adaptive Middleware Prototype
 """
 import sys
 import os
+import time
 import pytest
 
 # Ensure backend directory is in path
@@ -248,4 +249,20 @@ def test_async_queue_worker():
     time.sleep(0.3)
     assert queued_tasks_store[ack_id]["status"] == "completed"
     assert "completed_at" in queued_tasks_store[ack_id]
+
+
+def test_cleanup_inactive_sessions():
+    """Verify cleanup_inactive_sessions purges stale sessions and tasks"""
+    from adaptation_controller import adaptation_controller
+    from session_state_manager import session_manager
+    sid = f"test_stale_{int(time.time())}"
+    session = session_manager.get_or_create_session(sid)
+    # Manually backdate activity
+    session.last_activity = time.time() - 7200
+    
+    # Run cleanup with 3600 threshold
+    cleaned = adaptation_controller.cleanup_inactive_sessions(max_idle_seconds=3600)
+    assert cleaned >= 1
+    assert session_manager.get_session(sid) is None
+
 

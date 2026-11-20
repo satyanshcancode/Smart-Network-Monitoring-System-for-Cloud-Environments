@@ -67,19 +67,26 @@ class SessionWindow:
             self.last_success_time = now
 
     def calculate_trend(self, values: List[float]) -> float:
-        """Linear regression slope"""
+        """Linear regression slope with defensive fallback"""
         if len(values) < 2:
             return 0.0
-        x = np.arange(len(values))
-        slope, _ = np.polyfit(x, values, 1)
-        return float(slope)
+        try:
+            x = np.arange(len(values))
+            slope, _ = np.polyfit(x, values, 1)
+            return 0.0 if np.isnan(slope) or np.isinf(slope) else float(slope)
+        except Exception:
+            return 0.0
 
     def calculate_jitter(self, values: List[float]) -> float:
         """Mean absolute difference between consecutive latencies"""
         if len(values) < 2:
             return 0.0
-        diffs = np.abs(np.diff(values))
-        return float(np.mean(diffs))
+        try:
+            diffs = np.abs(np.diff(values))
+            jitter = float(np.mean(diffs))
+            return 0.0 if np.isnan(jitter) or np.isinf(jitter) else jitter
+        except Exception:
+            return 0.0
 
     def aggregate_features(self) -> Dict:
         """Extract statistical features"""

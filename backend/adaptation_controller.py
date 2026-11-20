@@ -471,7 +471,7 @@ class AdaptationController:
         request = Request(
             data=request_data,
             headers=request_headers or {},
-            is_final_submission=request_data.get('finalize', False)
+            is_final_submission=bool(request_data.get('finalize') or request_data.get('is_final', False))
         )
         
         # Record network metrics
